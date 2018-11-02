@@ -77,7 +77,7 @@ static char* strncpy0(char* dest, const char* src, size_t size)
 
 /* See documentation in header file. */
 int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
-                     void* user)
+                     const char* seps, void* user)
 {
     /* Uses a fair bit of stack (use heap instead if you need to) */
 #if INI_USE_STACK
@@ -113,6 +113,9 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
 #else
 #define HANDLER(u, s, n, v) handler(u, s, n, v)
 #endif
+
+    if (!seps)
+        seps = "=:";
 
     /* Scan through stream line by line */
     while (reader(line, max_line, stream) != NULL) {
@@ -173,9 +176,9 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
             }
         }
         else if (*start) {
-            /* Not a comment, must be a name[=:]value pair */
-            end = find_chars_or_comment(start, "=:");
-            if (*end == '=' || *end == ':') {
+            /* Not a comment, must be a name[seps]value pair */
+            end = find_chars_or_comment(start, seps);
+            if (*end) {
                 *end = '\0';
                 name = rstrip(start);
                 value = end + 1;
@@ -187,7 +190,7 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
                 value = lskip(value);
                 rstrip(value);
 
-                /* Valid name[=:]value pair found, call handler */
+                /* Valid name[seps]value pair found, call handler */
                 strncpy0(prev_name, name, sizeof(prev_name));
                 if (!HANDLER(user, section, name, value) && !error)
                     error = lineno;
@@ -212,13 +215,15 @@ int ini_parse_stream(ini_reader reader, void* stream, ini_handler handler,
 }
 
 /* See documentation in header file. */
-int ini_parse_file(FILE* file, ini_handler handler, void* user)
+int ini_parse_file(FILE* file, ini_handler handler, const char* seps,
+                   void* user)
 {
-    return ini_parse_stream((ini_reader)fgets, file, handler, user);
+    return ini_parse_stream((ini_reader)fgets, file, handler, seps, user);
 }
 
 /* See documentation in header file. */
-int ini_parse(const char* filename, ini_handler handler, void* user)
+int ini_parse(const char* filename, ini_handler handler, const char* seps,
+              void* user)
 {
     FILE* file;
     int error;
@@ -226,7 +231,7 @@ int ini_parse(const char* filename, ini_handler handler, void* user)
     file = fopen(filename, "r");
     if (!file)
         return -1;
-    error = ini_parse_file(file, handler, user);
+    error = ini_parse_file(file, handler, seps, user);
     fclose(file);
     return error;
 }
@@ -259,11 +264,13 @@ static char* ini_reader_string(char* str, int num, void* stream) {
 }
 
 /* See documentation in header file. */
-int ini_parse_string(const char* string, ini_handler handler, void* user) {
+int ini_parse_string(const char* string, ini_handler handler, const char* seps,
+                     void* user)
+{
     ini_parse_string_ctx ctx;
 
     ctx.ptr = string;
     ctx.num_left = strlen(string);
-    return ini_parse_stream((ini_reader)ini_reader_string, &ctx, handler,
+    return ini_parse_stream((ini_reader)ini_reader_string, &ctx, handler, seps,
                             user);
 }
